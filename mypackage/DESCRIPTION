@@ -1,0 +1,14 @@
+Package: fvToTable
+Title: fileview to table
+Version: 0.0.0.9000
+Authors@R: person("Kelsey", "Montgomery", email = "kssmonty@gmail.com", role = c("aut", "cre"))
+Description: This package takes a Synapse fileview, adds notation - "File added", "File removed", "Annotations modified", "File modified" - and pushes it to a Synapse table.
+Depends: R (>= 3.6.0)
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Imports:
+  dplyr,
+  purrr,
+  readr,
+  synapser
