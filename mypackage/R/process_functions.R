@@ -9,7 +9,7 @@
 #' @examples
 #' fv <- get_fv("syn18691012")
 #' table <- get_fv("syn20555115")
-get_fv <- function(fileview_id){
+get_fv <- function(fileview_id) {
   fileview <- synapser::synTableQuery(paste0("SELECT * FROM ", fileview_id))
   readr::read_csv(fileview$filepath, col_types = readr::cols(.default = "c"))
 }
@@ -20,13 +20,14 @@ get_fv <- function(fileview_id){
 #' @return A tibble with notation added to the notes column. ROW_ID and ROW_VERSION remain from existing table to enable storage to Synapse.
 #' @example
 #' mod_table(fv = get_fv("synId"), table = get_fv("synId"))
-mod_table <- function(fv, table){
+mod_table <- function(fv, table) {
   verIds <- check_version(fv, table)
   annotIds <- check_etag(fv, table)
   excludeCols <- c("ROW_ID", "ROW_ETAG", "ROW_VERSION")
   includeCols <- names(fv)[!(names(fv) %in% excludeCols)]
+  note_del_files <- table$id[!(table$notes %in% c("File removed"))]
 
-  if (!setequal(fv$id, table$id[!(table$notes %in% c("File removed"))])) {
+  if (!setequal(fv$id, note_del_files)) {
     new_entries <- setdiff(fv$id, table$id)
     del_entries <- setdiff(table$id, fv$id)
     current_delIds <- table$id[table$notes %in% c("File removed")]
@@ -52,13 +53,39 @@ mod_table <- function(fv, table){
       mutate(notes = ifelse(
         id %in% annotIds,
         "Annotations modified",
-        notes)) %>%
-      mutate(notes = ifelse(id %in% verIds, "File modified ", notes)) %>%
-      mutate(notes = ifelse(id %in% new_entries, "File added", notes))
+        notes
+      )
+    ) %>%
+      mutate(
+        notes = ifelse(
+          id %in% verIds,
+          "File modified ",
+          notes
+          )
+        ) %>%
+      mutate(
+        notes = ifelse(
+          id %in% new_entries,
+          "File added",
+          notes
+          )
+        )
   } else {
     coalesce_join(fv[, includeCols], table, by = "id") %>%
-      mutate(notes = ifelse(id %in% annotIds, "Annotations modified", notes)) %>%
-      mutate(notes = ifelse(id %in% verIds, "File modified ", notes))
+     mutate(
+       notes = ifelse(
+         id %in% annotIds,
+         "Annotations modified",
+         notes
+         )
+       ) %>%
+      mutate(
+        notes = ifelse(
+          id %in% verIds,
+          "File modified ",
+          notes
+          )
+        )
   }
 }
 #' Compare the fileview and table etag to note changes to the annotations or file metadata itself. This would indicate a user needs to update the metadata associated with the file.
@@ -69,12 +96,12 @@ mod_table <- function(fv, table){
 #' @example
 #' check_etag(fv = get_fv("synId"), table = get_fv("synId"))
 check_etag <- function(fv,
-                       table){
-  diff_tables <- dplyr::anti_join(fv[,c("id", "etag")], table[,c("id", "etag")])
+                       table) {
+  diff_tables <- dplyr::anti_join(fv[, c("id", "etag")], table[, c("id", "etag")])
   if (!(is.data.frame(diff_tables) && nrow(diff_tables) == 0)) {
     annotIds <- diff_tables$id
     annotIds
-     } else {
+  } else {
     return("No changes to existing annotations")
   }
 }
@@ -85,8 +112,8 @@ check_etag <- function(fv,
 #' @example
 #' check_version(fv = get_fv("synId"), table = get_fv("synId"))
 check_version <- function(fv,
-                          table){
-  diff_tables <- dplyr::anti_join(fv[,c("id", "currentVersion")], table[,c("id", "currentVersion")])
+                          table) {
+  diff_tables <- dplyr::anti_join(fv[, c("id", "currentVersion")], table[, c("id", "currentVersion")])
   if (!(is.data.frame(diff_tables) && nrow(diff_tables) == 0)) {
     verIds <- diff_tables$id
     verIds
@@ -96,11 +123,11 @@ check_version <- function(fv,
 }
 #' Fileview is joined to the existing table by synId, prioritizing the fileview annotations which are assummed to be the most updated information. dplyr::coalesce() prioritizes the first non-missing value at each position thus prioritizing the fileview annotations.
 #'
-#'@param x A tibble. The data is prioritized during coalesce() thus replacing data in y.
-#'@param y A tibble.
-#'@return A tibble with the most relevant metadata and notation.
-#'@example
-#'coalesce_join(x = fv, y = table)
+#' @param x A tibble. The data is prioritized during coalesce() thus replacing data in y.
+#' @param y A tibble.
+#' @return A tibble with the most relevant metadata and notation.
+#' @example
+#' coalesce_join(x = fv, y = table)
 coalesce_join <- function(x,
                           y,
                           by = NULL, suffix = c(".x", ".y"),
@@ -109,7 +136,7 @@ coalesce_join <- function(x,
   cols <- union(names(x), names(y))
   to_coalesce <- setdiff(c(names(x), names(y)), names(joined))
 
-  coalesced <- purrr::map_dfc(to_coalesce, ~dplyr::coalesce(
+  coalesced <- purrr::map_dfc(to_coalesce, ~ dplyr::coalesce(
     joined[[paste0(.x, suffix[1])]],
     joined[[paste0(.x, suffix[2])]]
   ))
@@ -119,9 +146,9 @@ coalesce_join <- function(x,
 }
 #' Store updated table to Synapse
 #'
-#'@param table_to_store A tibble. Output from mod_table()
-#'@param fileview_id A synId c().
-#'@return A Synapse client object with storage metadata.
-store <- function(table_to_store, fileview_id){
+#' @param table_to_store A tibble. Output from mod_table()
+#' @param fileview_id A synId c().
+#' @return A Synapse client object with storage metadata.
+store <- function(table_to_store, fileview_id) {
   synapser::synStore(synapser::Table(fileview_id, table_to_store))
 }
