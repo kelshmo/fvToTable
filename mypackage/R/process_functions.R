@@ -21,28 +21,42 @@ get_fv <- function(fileview_id){
 #' @example
 #' mod_table(fv = get_fv("synId"), table = get_fv("synId"))
 mod_table <- function(fv, table){
-  verIds <- check_version(fv,table)
+  verIds <- check_version(fv, table)
   annotIds <- check_etag(fv, table)
   excludeCols <- c("ROW_ID", "ROW_ETAG", "ROW_VERSION")
   includeCols <- names(fv)[!(names(fv) %in% excludeCols)]
 
-  if (!setequal(fv$id,table$id[!(table$notes %in% c("File removed"))])) {
+  if (!setequal(fv$id, table$id[!(table$notes %in% c("File removed"))])) {
     new_entries <- setdiff(fv$id, table$id)
     del_entries <- setdiff(table$id, fv$id)
     current_delIds <- table$id[table$notes %in% c("File removed")]
-    bound <- dplyr::bind_rows(table, fv[fv$id %in% new_entries,includeCols]) %>%
-      mutate(notes = ifelse(id %in% del_entries[!(del_entries %in% current_delIds)],
-                            c("File removed"),
-                            notes)) %>%
-      mutate(modifiedOn = ifelse(id %in% del_entries[!(del_entries %in% current_delIds)],
-                                 round(as.numeric(base::Sys.time())),
-                                 modifiedOn))
-    coalesce_join(fv[,includeCols], bound, by = "id") %>%
-      mutate(notes = ifelse(id %in% annotIds, "Annotations modified", notes)) %>%
+    bound <- dplyr::bind_rows(
+      table,
+      fv[fv$id %in% new_entries, includeCols]
+    ) %>%
+      mutate(
+        notes = ifelse(
+          id %in% del_entries[!(del_entries %in% current_delIds)],
+          c("File removed"),
+          notes
+        )
+      ) %>%
+      mutate(
+        modifiedOn = ifelse(
+          id %in% del_entries[!(del_entries %in% current_delIds)],
+          round(as.numeric(base::Sys.time())),
+          modifiedOn
+        )
+      )
+    coalesce_join(fv[, includeCols], bound, by = "id") %>%
+      mutate(notes = ifelse(
+        id %in% annotIds,
+        "Annotations modified",
+        notes)) %>%
       mutate(notes = ifelse(id %in% verIds, "File modified ", notes)) %>%
       mutate(notes = ifelse(id %in% new_entries, "File added", notes))
   } else {
-    coalesce_join(fv[,includeCols], table, by = "id") %>%
+    coalesce_join(fv[, includeCols], table, by = "id") %>%
       mutate(notes = ifelse(id %in% annotIds, "Annotations modified", notes)) %>%
       mutate(notes = ifelse(id %in% verIds, "File modified ", notes))
   }
@@ -56,14 +70,12 @@ mod_table <- function(fv, table){
 #' check_etag(fv = get_fv("synId"), table = get_fv("synId"))
 check_etag <- function(fv,
                        table){
-  new_key <- paste0(fv$etag, "_", fv$id)
-  key <- paste0(table$etag, "_", table$id)
-  if (!setequal(new_key, key)) {
-    toUpdate <- setdiff(new_key, key)
-    annotIds <- sapply(stringr::str_split(toUpdate, "_"), "[[", 2 )
+  diff_tables <- dplyr::anti_join(fv[,c("id", "etag")], table[,c("id", "etag")])
+  if (!(is.data.frame(diff_tables) && nrow(diff_tables) == 0)) {
+    annotIds <- diff_tables$id
     annotIds
      } else {
-    c("No changes to existing annotations")
+    return("No changes to existing annotations")
   }
 }
 #' Compare the fileview and table etag to note file metadata or file itself has been modified. This would indicate a user needs to download a new version.
@@ -74,14 +86,12 @@ check_etag <- function(fv,
 #' check_version(fv = get_fv("synId"), table = get_fv("synId"))
 check_version <- function(fv,
                           table){
-  new_key <- paste0(fv$currentVersion, "_", fv$id)
-  key <- paste0(table$currentVersion, "_", table$id)
-  if (!setequal(new_key, key)) {
-    toUpdate <- setdiff(new_key, key)
-    verIds <- sapply(stringr::str_split(toUpdate, "_"), "[[", 2 )
+  diff_tables <- dplyr::anti_join(fv[,c("id", "currentVersion")], table[,c("id", "currentVersion")])
+  if (!(is.data.frame(diff_tables) && nrow(diff_tables) == 0)) {
+    verIds <- diff_tables$id
     verIds
   } else {
-    ("No changes to existing files")
+    return("No changes to existing files")
   }
 }
 #' Fileview is joined to the existing table by synId, prioritizing the fileview annotations which are assummed to be the most updated information. dplyr::coalesce() prioritizes the first non-missing value at each position thus prioritizing the fileview annotations.
@@ -97,13 +107,7 @@ coalesce_join <- function(x,
                           join = dplyr::full_join, ...) {
   joined <- join(x, y, by = by, suffix = suffix, ...)
   cols <- union(names(x), names(y))
-  to_coalesce <- names(joined)[!names(joined) %in% cols]
-  suffix_used <- suffix[ifelse(endsWith(to_coalesce, suffix[1]), 1, 2)]
-  to_coalesce <- unique(substr(
-    to_coalesce,
-    1,
-    nchar(to_coalesce) - nchar(suffix_used)
-  ))
+  to_coalesce <- setdiff(c(names(x), names(y)), names(joined))
 
   coalesced <- purrr::map_dfc(to_coalesce, ~dplyr::coalesce(
     joined[[paste0(.x, suffix[1])]],
