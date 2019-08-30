@@ -10,7 +10,7 @@
 #' @examples
 #' fv <- get_v("syn18691012")
 #' table <- get_v("syn20555115")
-get_v <- function(fileview_id) {
+get_view <- function(fileview_id) {
   fileview <- synapser::synTableQuery(paste0("SELECT * FROM ", fileview_id))
   readr::read_csv(fileview$filepath, col_types = readr::cols(.default = "c"))
 }
